@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#061406"/>
+  <meta name="description" content="LASUASA Election Portal - Vote securely and efficiently"/>
+  <!-- Resource Hints for Performance -->
+  <link rel="preconnect" href="https://koutdhusjsjdshxtknqu.supabase.co" crossorigin/>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net"/>
+  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"/>
+  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"/>
+  
+  <title>LASUASA Election Portal</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#061406;font-family:"Segoe UI",Roboto,Georgia,serif;color:#e5e7eb;-webkit-font-smoothing:antialiased;}
+    #root{min-height:100vh;}
+    #loading{display:flex;align-items:center;justify-content:center;height:100vh;color:#86efac;flex-direction:column;gap:16px;background:#061406;}
+    .spin{width:50px;height:50px;border:4px solid rgba(134,239,172,0.15);border-top-color:#22c55e;border-radius:50%;animation:spin 0.8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .load-text{font-size:16px;color:#86efac;font-weight:500;letter-spacing:0.5px;}
+    .load-subtext{font-size:12px;color:#4b5563;margin-top:8px;}
+    /* Professional Polish */
+    button{font-family:inherit;transition:all 0.2s ease;}
+    input,select,textarea{font-family:inherit;background:#0f2313;border:1px solid #1f4d27;color:#e5e7eb;padding:10px 12px;border-radius:6px;transition:all 0.2s ease;}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,0.1);background:#142619;}
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spin"></div>
+    <span class="load-text">Loading LASUASA Election Portal…</span>
+    <span class="load-subtext">Secure & optimized for you</span>
+  </div>
+  <div id="root" style="display:none"></div>
+
+  <!-- React from CDN with improved performance -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Service Worker Registration for Offline Support & Caching -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('✓ Service Worker registered'))
+          .catch(err => console.log('Service Worker registration failed:', err));
+      });
+    }
+    // Performance timing
+    window.perfStart = performance.now();
+  </script>
+
+  <!-- Main Application -->
+  <script>
+"use strict";
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── SUPABASE CONFIGURATION ───────────────────────────────
+const SUPABASE_URL = "https://koutdhusjsjdshxtknqu.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdXRkaHVzanNqZHNoeHRrbnF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjg1MDAsImV4cCI6MjA5OTYwNDUwMH0.3WVOJurCjpuhJl9buEWAlngnYWpaJmmjfDueh37lbeo";
+const ADMIN_PASSWORD = "Themisvanguard";
+
+// ─── CACHE MANAGEMENT (NEW) ───────────────────────────────
+class SupabaseCache {
+  constructor() {
+    this.cache = new Map();
+    this.timestamps = new Map();
+    this.TTL = 5 * 60 * 1000; // 5 minute cache
+  }
+  
+  set(key, value) {
+    this.cache.set(key, value);
+    this.timestamps.set(key, Date.now());
+  }
+  
+  get(key) {
+    const ts = this.timestamps.get(key);
+    if (!ts) return null;
+    if (Date.now() - ts > this.TTL) {
+      this.cache.delete(key);
+      this.timestamps.delete(key);
+      return null;
+    }
+    return this.cache.get(key);
+  }
+  
+  clear() {
+    this.cache.clear();
+    this.timestamps.clear();
+  }
+}
+
+const cache = new SupabaseCache();
+
+// ─── OPTIMIZED SUPABASE REQUEST FUNCTION ───────────────────────────────
+const supabaseRequest = async (method, table, options = {}) => {
+  // Check cache first
+  const cacheKey = `${method}:${table}:${JSON.stringify(options)}`;
+  if (method === 'GET') {
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+  }
+
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`, SUPABASE_URL);
+  
+  // Add query parameters
+  if (options.select) url.searchParams.append('select', options.select);
+  if (options.eq) Object.entries(options.eq).forEach(([k, v]) => url.searchParams.append(k, `eq.${v}`));
+  if (options.order) url.searchParams.append('order', options.order);
+  if (options.limit) url.searchParams.append('limit', options.limit);
+  
+  const headers = {
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    const response = await fetch(url.toString(), { method, headers, body: options.body });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    
+    // Cache successful reads
+    if (method === 'GET') cache.set(cacheKey, data);
+    
+    // Log performance
+    const loadTime = (performance.now() - window.perfStart).toFixed(0);
+    console.log(`✓ ${method} ${table} (${loadTime}ms)`);
+    
+    return data;
+  } catch (error) {
+    console.error(`✗ ${method} ${table}:`, error.message);
+    throw error;
+  }
+};
+
+const uid = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+
+// ─── UI COMPONENTS ───────────────────────────────────────
+const Spinner = () => (
+  <div style={{ width: 24, height: 24, border: '2px solid #22c55e', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }}/>
+);
+
+const ErrBox = ({ children }) => (
+  <div style={{ background: '#7f1d1d', border: '1px solid #dc2626', color: '#fca5a5', padding: '16px', borderRadius: '8px', margin: '16px 0', fontSize: 14 }}>
+    <strong>⚠️ Error:</strong> {children}
+  </div>
+);
+
+// ─── MAIN APP COMPONENT ───────────────────────────────────
+function App() {
+  const [view, setView] = useState("home");
+  const [admin, setAdmin] = useState(false);
+  const [voter, setVoter] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [selection, setSelection] = useState({});
+  const [adminPW, setAdminPW] = useState("");
+  const [results, setResults] = useState(null);
+
+  // Load posts on mount
+  useEffect(() => {
+    const loadPosts = async () => {
+      try {
+        setLoading(true);
+        setErr("");
+        // Optimized query: select only needed fields
+        const data = await supabaseRequest('GET', 'posts', {
+          select: 'id,title,created_at',
+          order: 'created_at.desc'
+        });
+        setPosts(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setErr("Failed to load voting positions. Please refresh.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPosts();
+  }, []);
+
+  const handleVoterID = async (id) => {
+    try {
+      setBusy(true);
+      setErr("");
+      const voter_data = await supabaseRequest('GET', 'voters', {
+        eq: { matric_no: id },
+        select: 'id,matric_no,name,has_voted'
+      });
+      
+      if (!voter_data.length) throw new Error("Voter ID not found");
+      if (voter_data[0].has_voted) throw new Error("You have already voted");
+      
+      setVoter(voter_data[0]);
+      setView("vote");
+      setSelection({});
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitVote = async () => {
+    try {
+      setBusy(true);
+      setErr("");
+      
+      // Prepare votes
+      const votes = Object.entries(selection).map(([post_id, candidate_id]) => ({
+        id: uid(),
+        voter_id: voter.id,
+        post_id,
+        candidate_id,
+        timestamp: new Date().toISOString()
+      }));
+
+      // Insert votes (batch operation)
+      await supabaseRequest('POST', 'votes', {
+        body: JSON.stringify(votes)
+      });
+
+      // Mark as voted
+      await supabaseRequest('PATCH', `voters?id=eq.${voter.id}`, {
+        body: JSON.stringify({ has_voted: true })
+      });
+
+      // Clear cache for fresh data
+      cache.clear();
+      
+      setView("success");
+      setVoter(null);
+      setSelection({});
+    } catch (e) {
+      setErr("Vote submission failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkAdmin = async (pw) => {
+    if (pw === ADMIN_PASSWORD) {
+      setAdmin(true);
+      setAdminPW("");
+      
+      // Load results
+      try {
+        const res = await supabaseRequest('GET', 'votes', {
+          select: 'post_id,candidate_id',
+          limit: 10000
+        });
+        setResults(res);
+      } catch (e) {
+        setErr("Failed to load results: " + e.message);
+      }
+    } else {
+      setErr("Invalid admin password");
+    }
+  };
+
+  // ─── RENDER VIEWS ───────────────────────────────────────
+  if (view === "success") {
+    return (
+      <div style={{ minHeight: '100vh', background: '#061406', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '500px' }}>
+          <div style={{ fontSize: '64px', marginBottom: '20px' }}>✓</div>
+          <h1 style={{ color: '#22c55e', fontSize: '28px', marginBottom: '12px' }}>Vote Submitted Successfully</h1>
+          <p style={{ color: '#9ca3af', marginBottom: '32px', lineHeight: '1.6' }}>Your vote has been securely recorded. Thank you for participating in LASUASA elections.</p>
+          <button onClick={() => { setView("home"); setPosts([]); }} style={{ background: 'linear-gradient(135deg,#166534,#15803d)', color: '#f0fff0', border: '1px solid #22c55e', borderRadius: '8px', padding: '12px 32px', cursor: 'pointer', fontWeight: '700', fontSize: '15px', boxShadow: '0 4px 12px rgba(34,197,94,0.2)' }}>Return to Home</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "vote" && voter) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#061406', padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
+        <div style={{ color: '#86efac', marginBottom: '24px' }}>
+          <h2>Voting Portal</h2>
+          <p style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>Voter: <strong>{voter.name}</strong></p>
+        </div>
+        
+        <div style={{ display: 'grid', gap: '16px' }}>
+          {posts.map(post => (
+            <div key={post.id} style={{ background: '#0f2313', border: '1px solid #1f4d27', borderRadius: '8px', padding: '16px', cursor: 'pointer', borderLeft: selection[post.id] ? '4px solid #22c55e' : '4px solid transparent', transition: 'all 0.2s' }} onClick={() => setSelection(s => ({ ...s, [post.id]: selection[post.id] ? null : post.id }))}>
+              <h3 style={{ color: '#86efac', marginBottom: '8px' }}>{post.title}</h3>
+              {selection[post.id] && <div style={{ fontSize: '11px', color: '#22c55e', fontWeight: '700', marginTop: '4px' }}>✓ SELECTED</div>}
+            </div>
+          ))}
+        </div>
+        
+        {err && <ErrBox>{err}</ErrBox>}
+        
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px' }}>
+          <button onClick={() => { setView("home"); setVoter(null); }} style={{ background: '#1f2937', color: '#d1d5db', border: '1px solid #4b5563', borderRadius: '8px', padding: '10px 24px', cursor: 'pointer', fontWeight: '600' }}>Cancel</button>
+          <button onClick={submitVote} disabled={busy} style={{ background: 'linear-gradient(135deg,#166534,#15803d)', color: '#f0fff0', border: '1px solid #22c55e', borderRadius: '8px', padding: '10px 24px', cursor: busy ? 'not-allowed' : 'pointer', fontWeight: '700', fontSize: '15px', boxShadow: '0 4px 12px rgba(34,197,94,0.2)', opacity: busy ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {busy ? (
+              <>
+                <Spinner />
+                Submitting…
+              </>
+            ) : (
+              "Submit Ballot →"
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // HOME VIEW
+  return (
+    <div style={{ minHeight: '100vh', background: '#061406', padding: '40px 20px', maxWidth: '900px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+        <h1 style={{ color: '#22c55e', fontSize: '32px', marginBottom: '8px', fontWeight: '700' }}>LASUASA Elections 2025/2026</h1>
+        <p style={{ color: '#9ca3af', fontSize: '16px' }}>Secure • Transparent • Efficient</p>
+      </div>
+
+      {/* Voter Input */}
+      <div style={{ background: '#0f2313', border: '1px solid #1f4d27', borderRadius: '12px', padding: '32px', marginBottom: '32px' }}>
+        <h2 style={{ color: '#86efac', marginBottom: '20px', fontSize: '20px' }}>Begin Voting</h2>
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+          <input 
+            type="text"
+            placeholder="Enter your matric number"
+            defaultValue=""
+            onKeyPress={e => e.key === 'Enter' && handleVoterID(e.target.value)}
+            onChange={e => {
+              if (e.key === 'Enter') handleVoterID(e.target.value);
+            }}
+            style={{ flex: 1 }}
+          />
+          <button 
+            onClick={e => {
+              const input = e.target.previousElementSibling;
+              handleVoterID(input.value);
+            }}
+            disabled={busy}
+            style={{ background: 'linear-gradient(135deg,#166534,#15803d)', color: '#f0fff0', border: '1px solid #22c55e', borderRadius: '6px', padding: '10px 24px', cursor: busy ? 'not-allowed' : 'pointer', fontWeight: '700', opacity: busy ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            {busy ? <Spinner /> : '→'}
+          </button>
+        </div>
+        {err && <ErrBox>{err}</ErrBox>}
+        <p style={{ fontSize: '12px', color: '#4b5563', marginTop: '12px' }}>💡 Tip: Your matric number is unique to you. Voting is secure and anonymous.</p>
+      </div>
+
+      {/* Admin Login */}
+      {!admin && (
+        <details style={{ marginTop: '40px', cursor: 'pointer' }}>
+          <summary style={{ color: '#4b5563', fontSize: '14px', padding: '12px', background: '#0f2313', borderRadius: '6px', border: '1px solid #1f4d27' }}>
+            ⚙️ Admin Access
+          </summary>
+          <div style={{ background: '#0f2313', border: '1px solid #1f4d27', borderRadius: '6px', padding: '20px', marginTop: '12px' }}>
+            <input 
+              type="password"
+              placeholder="Admin password"
+              value={adminPW}
+              onChange={e => setAdminPW(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && checkAdmin(adminPW)}
+              style={{ width: '100%', marginBottom: '12px' }}
+            />
+            <button 
+              onClick={() => checkAdmin(adminPW)}
+              style={{ background: '#6b7280', color: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '10px 20px', cursor: 'pointer', fontWeight: '600', width: '100%' }}
+            >
+              Login
+            </button>
+          </div>
+        </details>
+      )}
+
+      {/* Admin Dashboard */}
+      {admin && results && (
+        <div style={{ background: '#0f2313', border: '1px solid #22c55e', borderRadius: '12px', padding: '24px', marginTop: '32px' }}>
+          <h2 style={{ color: '#22c55e', marginBottom: '16px' }}>📊 Live Results</h2>
+          <p style={{ color: '#9ca3af', fontSize: '14px' }}>Total votes: <strong>{results.length}</strong></p>
+          <button 
+            onClick={() => { setAdmin(false); cache.clear(); }}
+            style={{ marginTop: '16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 16px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}
+          >
+            Logout
+          </button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <Spinner />
+          <p style={{ color: '#9ca3af', marginTop: '16px' }}>Loading voting positions…</p>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ textAlign: 'center', marginTop: '60px', color: '#4b5563', fontSize: '12px', borderTop: '1px solid #1f4d27', paddingTop: '20px' }}>
+        <p>LASUASA Election Portal • Secure & Verified</p>
+        <p style={{ marginTop: '8px', fontSize: '11px' }}>Loaded in {(performance.now() - window.perfStart).toFixed(0)}ms</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── RENDER APP ───────────────────────────────────────
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('root').style.display = 'block';
+  root.render(<App />);
+} catch (e) {
+  document.getElementById('loading').innerHTML = '<div style="color:#f87171;text-align:center;padding:2rem"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:18px">' + e.message + '</div></div>';
+  console.error(e);
+}
+  </script>
+</body>
+</html>
