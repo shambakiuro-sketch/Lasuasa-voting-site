@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#061406"/>
+  <meta name="description" content="LASUASA Election Portal - Vote securely and efficiently"/>
+  <title>LASUASA Election Portal</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{width:100%;height:100%;}
+    body{background:#061406;font-family:"Segoe UI",Roboto,Georgia,serif;color:#e5e7eb;-webkit-font-smoothing:antialiased;}
+    
+    #root{min-height:100vh;width:100%;}
+    
+    /* Loading State */
+    #loading{display:flex;align-items:center;justify-content:center;height:100vh;color:#86efac;flex-direction:column;gap:16px;background:#061406;}
+    .spin{width:50px;height:50px;border:4px solid rgba(134,239,172,0.15);border-top-color:#22c55e;border-radius:50%;animation:spin 0.8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .load-text{font-size:16px;color:#86efac;font-weight:500;letter-spacing:0.5px;}
+    .load-subtext{font-size:12px;color:#4b5563;margin-top:8px;}
+    
+    /* Main Container */
+    .container{min-height:100vh;background:#061406;padding:40px 20px;max-width:900px;margin:0 auto;}
+    
+    /* Header */
+    .header{text-align:center;margin-bottom:48px;}
+    .header h1{color:#22c55e;font-size:32px;margin-bottom:8px;font-weight:700;}
+    .header p{color:#9ca3af;font-size:16px;}
+    
+    /* Card */
+    .card{background:#0f2313;border:1px solid #1f4d27;border-radius:12px;padding:32px;margin-bottom:32px;}
+    .card h2{color:#86efac;margin-bottom:20px;font-size:20px;}
+    
+    /* Input & Button */
+    input,select,textarea{font-family:inherit;background:#0f2313;border:1px solid #1f4d27;color:#e5e7eb;padding:10px 12px;border-radius:6px;transition:all 0.2s ease;width:100%;}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,0.1);background:#142619;}
+    
+    .input-group{display:flex;gap:12px;margin-bottom:16px;}
+    .input-group input{flex:1;}
+    .input-group button{flex:0 0 auto;width:50px;}
+    
+    button{font-family:inherit;background:linear-gradient(135deg,#166534,#15803d);color:#f0fff0;border:1px solid #22c55e;border-radius:6px;padding:10px 24px;cursor:pointer;font-weight:700;transition:all 0.2s ease;display:flex;align-items:center;justify-content:center;gap:8px;}
+    button:hover{box-shadow:0 4px 12px rgba(34,197,94,0.3);}
+    button:disabled{opacity:0.7;cursor:not-allowed;}
+    button.secondary{background:#1f2937;color:#d1d5db;border:1px solid #4b5563;}
+    
+    .error{background:#7f1d1d;border:1px solid #dc2626;color:#fca5a5;padding:16px;border-radius:8px;margin:16px 0;font-size:14px;}
+    .error strong{display:block;margin-bottom:8px;}
+    
+    .success{text-align:center;padding:40px;}
+    .success-icon{font-size:64px;margin-bottom:20px;}
+    .success h1{color:#22c55e;font-size:28px;margin-bottom:12px;}
+    .success p{color:#9ca3af;margin-bottom:32px;line-height:1.6;}
+    
+    .voter-info{color:#9ca3af;font-size:14px;margin-top:8px;}
+    .voter-info strong{color:#86efac;}
+    
+    .tip{font-size:12px;color:#4b5563;margin-top:12px;}
+    .tip::before{content:"💡 ";margin-right:4px;}
+    
+    .footer{text-align:center;margin-top:60px;color:#4b5563;font-size:12px;border-top:1px solid #1f4d27;padding-top:20px;}
+    
+    .position{background:#0f2313;border:1px solid #1f4d27;border-radius:8px;padding:16px;margin-bottom:16px;cursor:pointer;border-left:4px solid transparent;transition:all 0.2s;}
+    .position:hover{border-color:#22c55e;}
+    .position.selected{border-left-color:#22c55e;}
+    .position h3{color:#86efac;margin-bottom:8px;}
+    .position.selected::after{content:"✓ SELECTED";font-size:11px;color:#22c55e;font-weight:700;display:block;margin-top:4px;}
+    
+    .hidden{display:none;}
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spin"></div>
+    <span class="load-text">Loading LASUASA Election Portal…</span>
+    <span class="load-subtext">Secure & optimized for you</span>
+  </div>
+  <div id="root" style="display:none"></div>
+
+  <script>
+    "use strict";
+    window.perfStart = performance.now();
+    
+    const SUPABASE_URL = "https://koutdhusjsjdshxtknqu.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtvdXRkaHVzanNqZHNoeHRrbnF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjg1MDAsImV4cCI6MjA5OTYwNDUwMH0.3WVOJurCjpuhJl9buEWAlngnYWpaJmmjfDueh37lbeo";
+    const ADMIN_PASSWORD = "Themisvanguard";
+    
+    // Simple state management (no external libraries)
+    let appState = {
+      view: 'home',
+      posts: [],
+      voter: null,
+      selection: {},
+      loading: false,
+      error: '',
+      admin: false,
+      busy: false,
+      results: null
+    };
+    
+    // Supabase REST API calls
+    async function supabaseRequest(method, table, options = {}) {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`, SUPABASE_URL);
+      
+      if (options.select) url.searchParams.append('select', options.select);
+      if (options.eq) Object.entries(options.eq).forEach(([k, v]) => 
+        url.searchParams.append(k, `eq.${v}`)
+      );
+      if (options.order) url.searchParams.append('order', options.order);
+      if (options.limit) url.searchParams.append('limit', options.limit);
+      
+      const headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      };
+      
+      try {
+        const response = await fetch(url.toString(), { method, headers, body: options.body });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error(`✗ ${method} ${table}:`, error.message);
+        throw error;
+      }
+    }
+    
+    // Load posts on startup
+    async function loadPosts() {
+      try {
+        appState.loading = true;
+        appState.error = '';
+        const data = await supabaseRequest('GET', 'posts', {
+          select: 'id,title,created_at',
+          order: 'created_at.desc'
+        });
+        appState.posts = Array.isArray(data) ? data : [];
+        appState.loading = false;
+        render();
+      } catch (e) {
+        appState.error = 'Failed to load voting positions. Please refresh.';
+        appState.loading = false;
+        render();
+      }
+    }
+    
+    // Handle voter login
+    async function handleVoterID(id) {
+      if (!id.trim()) {
+        appState.error = 'Please enter your matric number';
+        render();
+        return;
+      }
+      
+      try {
+        appState.busy = true;
+        appState.error = '';
+        render();
+        
+        const voter_data = await supabaseRequest('GET', 'voters', {
+          eq: { matric_no: id },
+          select: 'id,matric_no,name,has_voted'
+        });
+        
+        if (!voter_data.length) throw new Error("Voter ID not found");
+        if (voter_data[0].has_voted) throw new Error("You have already voted");
+        
+        appState.voter = voter_data[0];
+        appState.view = 'vote';
+        appState.selection = {};
+        appState.busy = false;
+        render();
+      } catch (e) {
+        appState.error = e.message;
+        appState.busy = false;
+        render();
+      }
+    }
+    
+    // Submit vote
+    async function submitVote() {
+      try {
+        appState.busy = true;
+        appState.error = '';
+        render();
+        
+        const votes = Object.entries(appState.selection).map(([post_id, candidate_id]) => ({
+          id: Math.random().toString(36).slice(2, 8).toUpperCase(),
+          voter_id: appState.voter.id,
+          post_id,
+          candidate_id,
+          timestamp: new Date().toISOString()
+        }));
+        
+        await supabaseRequest('POST', 'votes', {
+          body: JSON.stringify(votes)
+        });
+        
+        await supabaseRequest('PATCH', `voters?id=eq.${appState.voter.id}`, {
+          body: JSON.stringify({ has_voted: true })
+        });
+        
+        appState.view = 'success';
+        appState.voter = null;
+        appState.selection = {};
+        appState.busy = false;
+        render();
+      } catch (e) {
+        appState.error = "Vote submission failed: " + e.message;
+        appState.busy = false;
+        render();
+      }
+    }
+    
+    // Check admin password
+    async function checkAdmin(pw) {
+      if (pw === ADMIN_PASSWORD) {
+        appState.admin = true;
+        
+        try {
+          const res = await supabaseRequest('GET', 'votes', {
+            select: 'post_id,candidate_id',
+            limit: 10000
+          });
+          appState.results = res;
+        } catch (e) {
+          appState.error = "Failed to load results: " + e.message;
+        }
+      } else {
+        appState.error = "Invalid admin password";
+      }
+      render();
+    }
+    
+    // Render UI
+    function render() {
+      const root = document.getElementById('root');
+      const loading = document.getElementById('loading');
+      
+      let html = '';
+      
+      if (appState.view === 'success') {
+        html = `
+          <div class="success">
+            <div class="success-icon">✓</div>
+            <h1>Vote Submitted Successfully</h1>
+            <p>Your vote has been securely recorded. Thank you for participating in LASUASA elections.</p>
+            <button onclick="goHome()" class="primary">Return to Home</button>
+          </div>
+        `;
+      } else if (appState.view === 'vote' && appState.voter) {
+        html = `
+          <div class="container">
+            <div style="color:#86efac;margin-bottom:24px;">
+              <h2>Voting Portal</h2>
+              <div class="voter-info">Voter: <strong>${appState.voter.name}</strong></div>
+            </div>
+            
+            <div style="display:grid;gap:16px;margin-bottom:32px;">
+              ${appState.posts.map(post => `
+                <div class="position ${appState.selection[post.id] ? 'selected' : ''}" 
+                     onclick="toggleSelection('${post.id}')">
+                  <h3>${post.title}</h3>
+                </div>
+              `).join('')}
+            </div>
+            
+            ${appState.error ? `<div class="error"><strong>⚠️ Error:</strong> ${appState.error}</div>` : ''}
+            
+            <div style="display:flex;gap:12px;justify-content:flex-end;">
+              <button class="secondary" onclick="goHome()" ${appState.busy ? 'disabled' : ''}>Cancel</button>
+              <button onclick="submitVote()" ${appState.busy ? 'disabled' : ''}>
+                ${appState.busy ? '⟳ Submitting…' : 'Submit Ballot →'}
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        // Home view
+        html = `
+          <div class="container">
+            <div class="header">
+              <h1>LASUASA Elections 2025/2026</h1>
+              <p>Secure • Transparent • Efficient</p>
+            </div>
+            
+            <div class="card">
+              <h2>Begin Voting</h2>
+              <div class="input-group">
+                <input type="text" id="matric-input" placeholder="Enter your matric number" 
+                       onkeypress="if(event.key==='Enter') handleVoterID(this.value)">
+                <button onclick="handleVoterID(document.getElementById('matric-input').value)"
+                        ${appState.busy ? 'disabled' : ''}>
+                  ${appState.busy ? '⟳' : '→'}
+                </button>
+              </div>
+              ${appState.error ? `<div class="error"><strong>⚠️ Error:</strong> ${appState.error}</div>` : ''}
+              <p class="tip">Your matric number is unique to you. Voting is secure and anonymous.</p>
+            </div>
+            
+            ${appState.admin && appState.results ? `
+              <div class="card">
+                <h2>📊 Live Results</h2>
+                <p style="color:#9ca3af;font-size:14px;">Total votes: <strong>${appState.results.length}</strong></p>
+                <button class="secondary" onclick="logout()" style="margin-top:16px;width:100%;">Logout</button>
+              </div>
+            ` : !appState.admin ? `
+              <details style="margin-top:40px;cursor:pointer;">
+                <summary style="color:#4b5563;font-size:14px;padding:12px;background:#0f2313;border-radius:6px;border:1px solid #1f4d27;">
+                  ⚙️ Admin Access
+                </summary>
+                <div class="card" style="margin-top:12px;">
+                  <input type="password" id="admin-pw" placeholder="Admin password" 
+                         onkeypress="if(event.key==='Enter') checkAdmin(this.value)">
+                  <button onclick="checkAdmin(document.getElementById('admin-pw').value)" 
+                          style="margin-top:12px;width:100%;">Login</button>
+                </div>
+              </details>
+            ` : ''}
+            
+            ${appState.loading ? `
+              <div style="text-align:center;padding:40px;">
+                <div class="spin" style="margin:0 auto;"></div>
+                <p style="color:#9ca3af;margin-top:16px;">Loading voting positions…</p>
+              </div>
+            ` : ''}
+            
+            <div class="footer">
+              <p>LASUASA Election Portal • Secure & Verified</p>
+              <p style="margin-top:8px;font-size:11px;">Loaded in ${(performance.now() - window.perfStart).toFixed(0)}ms</p>
+            </div>
+          </div>
+        `;
+      }
+      
+      root.innerHTML = html;
+      loading.style.display = 'none';
+      root.style.display = 'block';
+    }
+    
+    // Global functions
+    window.handleVoterID = handleVoterID;
+    window.submitVote = submitVote;
+    window.checkAdmin = checkAdmin;
+    window.goHome = function() {
+      appState.view = 'home';
+      appState.voter = null;
+      appState.error = '';
+      appState.selection = {};
+      render();
+    };
+    window.logout = function() {
+      appState.admin = false;
+      appState.results = null;
+      render();
+    };
+    window.toggleSelection = function(postId) {
+      appState.selection[postId] = appState.selection[postId] ? null : postId;
+      render();
+    };
+    
+    // Start app
+    loadPosts();
+  </script>
+</body>
+</html>
