@@ -15,7 +15,7 @@ import {
   deletePost,
   deleteCandidate,
   getVotingResults
-} from '@/lib/supabase'
+} from '../lib/supabase'
 import Link from 'next/link'
 
 type Tab = 'voters' | 'posts' | 'candidates' | 'votes' | 'results' | 'settings'
