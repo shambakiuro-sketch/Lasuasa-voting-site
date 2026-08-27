@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase, checkVoter, getPosts, submitVote } from '@/lib/supabase'
+import { supabase, checkVoter, getPosts, submitVote } from '../lib/supabase'
 import Link from 'next/link'
 
 export default function VoterPortal() {
