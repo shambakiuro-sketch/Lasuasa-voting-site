@@ -1571,7 +1571,7 @@ const isTie = sorted.filter(c => (t[c.id] || 0) === highestVotes && highestVotes
                             React.createElement("div", null,
                                 React.createElement("div", { style: { fontWeight: 600, color: "#86efac", marginBottom: 4 } }, "Level " + level),
                                 React.createElement("div", { style: { fontSize: 11, color: "#4b5563", wordBreak: "break-all" } }, db.url.substring(0, 50) + "...")),
-                            React.createElement("button", { onClick: () => removeDatabase(level), disabled: busy, style: Object.assign(Object.assign({}, DBTN), { fontSize: 12 }) }, "Remove")))))));
+                            React.createElement("button", { onClick: () => removeDatabase(level), disabled: busy, style: Object.assign(Object.assign({}, DBTN), { fontSize: 12 }) }, "Remove"))))))
 }
 // ── Post vote detail ──────────────────────────────────────────────
 function PostVoteDetail({ post, candidates, voters, tally }) {
